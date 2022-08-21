@@ -15,8 +15,9 @@ import (
 
 	log "github.com/cihub/seelog"
 	"github.com/pkg/errors"
-	"github.com/schollz/rwtxt/pkg/utils"
 	"github.com/schollz/versionedtext"
+
+	"argc.in/scratch/pkg/utils"
 )
 
 // New will initialize a filesystem by creating DB and calling InitializeDB.

@@ -1,4 +1,4 @@
-module github.com/schollz/rwtxt
+module argc.in/scratch
 
 go 1.19
 

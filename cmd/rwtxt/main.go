@@ -9,8 +9,9 @@ import (
 
 	log "github.com/cihub/seelog"
 	_ "github.com/mattn/go-sqlite3"
-	"github.com/schollz/rwtxt"
-	"github.com/schollz/rwtxt/pkg/db"
+
+	"argc.in/scratch"
+	"argc.in/scratch/pkg/db"
 )
 
 var (

@@ -20,8 +20,9 @@ import (
 	"github.com/disintegration/imaging"
 
 	log "github.com/schollz/logger"
-	"github.com/schollz/rwtxt/pkg/db"
-	"github.com/schollz/rwtxt/pkg/utils"
+
+	"argc.in/scratch/pkg/db"
+	"argc.in/scratch/pkg/utils"
 )
 
 const introText = "This note is empty. Click to edit it."
