@@ -1,13 +1,11 @@
-FROM golang:1.19-alpine as builder
-RUN apk add --no-cache git make g++ gzip
-RUN go get -v github.com/jteeuwen/go-bindata/go-bindata
-WORKDIR /go/rwtxt
-COPY . .
-RUN make exec
+# Step 1: Build
+FROM golang:1.19-alpine AS builder
+RUN apk --update --no-cache add musl-dev gcc
+WORKDIR /app
+COPY . /app
+RUN CC=/usr/bin/x86_64-alpine-linux-musl-gcc go build --ldflags '-linkmode external -extldflags "-static" -s -w' -o /scratch ./cmd/rwtxt
 
-FROM alpine:latest 
-VOLUME /data
-EXPOSE 8152
-COPY --from=builder /go/rwtxt/rwtxt /rwtxt
-ENTRYPOINT ["/rwtxt"]
-CMD ["--db","/data/rwtxt.db","--resizeonrequest","--resizewidth","600"]
+# Step 2: Final
+FROM alpine:latest
+COPY --from=builder /scratch /usr/local/bin/scratch
+ENTRYPOINT ["/usr/local/bin/scratch"]
