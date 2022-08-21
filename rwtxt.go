@@ -49,7 +49,7 @@ func New(fs *db.FileSystem, config Config) *RWTxt {
 			},
 		},
 		markdown:  markdown.NewParser(),
-		templates: template.Must(template.New("rwtxt").Funcs(funcMap).ParseFS(_templates, "templates/*.html")),
+		templates: template.Must(template.New("scratch").Funcs(funcMap).ParseFS(_templates, "templates/*.html")),
 	}
 }
 

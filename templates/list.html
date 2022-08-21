@@ -11,7 +11,7 @@
 			{{range .Files}}
 			<div>
 				<div>
-						<a href="/{{$.Domain}}/{{.ID}}">{{.Slug}}</a>
+						<a href="/{{$.Domain}}/{{.Slug}}">{{.Slug}}</a>
 				</div>
 				<div>
 						{{ if $.RWTxtConfig.OrderByCreated}}{{.CreatedDate $.UTCOffset}}{{else}}{{.ModifiedDate $.UTCOffset}}{{end}}

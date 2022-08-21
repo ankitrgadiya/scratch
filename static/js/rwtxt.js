@@ -1,9 +1,11 @@
 // websockets 
 var socket;
+
 const socketMessageListener = (event) => {
     // console.log(event);
     CY.serverResponse(event.data);
 };
+
 const socketOpenListener = (event) => {
     // console.log('Connected');
     document.getElementById("notsaved").style.display = 'none';
@@ -12,6 +14,7 @@ const socketOpenListener = (event) => {
         document.getElementById("connectedicon").style.display = 'none';
     }, 1000);
 };
+
 const socketCloseListener = (event) => {
     if (socket) {
         console.error('Disconnected.');
@@ -211,7 +214,6 @@ function showMessage() {
         setTimeout(function() { x.className = x.className.replace("show", ""); }, 3000);
     }
 }
-
 
 function onUploadFinished(file) {
     // // console.log("upload finished");

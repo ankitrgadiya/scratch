@@ -288,7 +288,7 @@ func (tr *TemplateRender) getUTCOffsetFromCookie(r *http.Request) {
 }
 
 func (tr *TemplateRender) handleLogout(w http.ResponseWriter, r *http.Request) (err error) {
-	tr.Domain = strings.ToLower(strings.TrimSpace(r.URL.Query().Get("d")))
+	tr.Domain = strings.ToLower(strings.TrimSpace(r.URL.Query().Get("domain")))
 
 	// delete all cookies
 	_, err = r.Cookie("rwtxt-domains")
