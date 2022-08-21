@@ -93,12 +93,7 @@ func main() {
 		OrderByCreated:  *created,
 	}
 
-	rwt, err := rwtxt.New(fs, config)
-	if err != nil {
-		panic(err)
-	}
-
-	err = rwt.Serve()
+	err = rwtxt.New(fs, config).Serve()
 	if err != nil {
 		log.Error(err)
 	}

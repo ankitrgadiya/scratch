@@ -118,7 +118,7 @@ func (tr *TemplateRender) handleList(w http.ResponseWriter, r *http.Request, que
 	w.Header().Set("Content-Type", "text/html")
 	gz := gzip.NewWriter(w)
 	defer gz.Close()
-	return tr.rwt.listTemplate.Execute(gz, tr)
+	return tr.rwt.templates.ExecuteTemplate(gz, "list.html", tr)
 }
 
 func (tr TemplateRender) updateDomainCookie(w http.ResponseWriter, r *http.Request) (cookie http.Cookie) {
@@ -275,7 +275,7 @@ func (tr *TemplateRender) handleMain(w http.ResponseWriter, r *http.Request) (er
 	w.Header().Set("Content-Type", "text/html")
 	gz := gzip.NewWriter(w)
 	defer gz.Close()
-	return tr.rwt.mainTemplate.Execute(gz, tr)
+	return tr.rwt.templates.ExecuteTemplate(gz, "main.html", tr)
 }
 
 func (tr *TemplateRender) getUTCOffsetFromCookie(r *http.Request) {
@@ -638,8 +638,7 @@ func (tr *TemplateRender) handleViewEdit(w http.ResponseWriter, r *http.Request)
 	gz := gzip.NewWriter(w)
 	defer gz.Close()
 
-	return tr.rwt.viewEditTemplate.Execute(gz, tr)
-
+	return tr.rwt.templates.ExecuteTemplate(gz, "viewedit.html", tr)
 }
 
 func (tr *TemplateRender) handleUploads(w http.ResponseWriter, r *http.Request, id string) (err error) {

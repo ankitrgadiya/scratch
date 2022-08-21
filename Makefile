@@ -3,24 +3,11 @@ LDFLAGS=-ldflags "-s -w -X main.Version=${HASH}"
 
 prereq: 
 	go install -v github.com/tdewolff/minify/cmd/minify
-	go install -v github.com/jteeuwen/go-bindata/go-bindata
 
-bundle:
-	rm -rf assets
-	cp -r static assets
-	cd assets && gzip -9 -r *
-	cp templates/main.html assets/main.html
-	cp templates/footer.html assets/footer.html
-	cp templates/list.html assets/list.html
-	cp templates/header.html assets/header.html
-	cp templates/viewedit.html assets/viewedit.html
-
-exec: prereq bundle
-	go-bindata -pkg rwtxt -nocompress assets assets/img assets/js assets/css assets/img/favicon
+exec: prereq
 	cd cmd/rwtxt && go build -v --tags "fts5" ${LDFLAGS} && cp rwtxt ../../
 
-quick: bundle
-	go-bindata -pkg rwtxt -nocompress assets assets/img assets/js assets/css assets/img/favicon
+quick:
 	go build -v --tags "fts5" ${LDFLAGS} ./cmd/rwtxt
 
 run: quick

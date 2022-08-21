@@ -16,17 +16,12 @@ import (
 	"github.com/schollz/rwtxt/pkg/utils"
 )
 
-const DefaultBind = ":8152"
-
 type RWTxt struct {
-	Config           Config
-	viewEditTemplate *template.Template
-	mainTemplate     *template.Template
-	loginTemplate    *template.Template
-	listTemplate     *template.Template
-	fs               *db.FileSystem
-	markdown         *markdown.Parser
-	wsupgrader       websocket.Upgrader
+	Config     Config
+	templates  *template.Template
+	fs         *db.FileSystem
+	markdown   *markdown.Parser
+	wsupgrader websocket.Upgrader
 }
 
 type Config struct {
@@ -38,14 +33,12 @@ type Config struct {
 	OrderByCreated  bool
 }
 
-func New(fs *db.FileSystem, configUser ...Config) (*RWTxt, error) {
-	config := Config{
-		Bind: ":8152",
+func New(fs *db.FileSystem, config Config) *RWTxt {
+	funcMap := template.FuncMap{
+		"replace": replace,
 	}
-	if len(configUser) > 0 {
-		config = configUser[0]
-	}
-	rwt := &RWTxt{
+
+	return &RWTxt{
 		Config: config,
 		fs:     fs,
 		wsupgrader: websocket.Upgrader{
@@ -55,54 +48,9 @@ func New(fs *db.FileSystem, configUser ...Config) (*RWTxt, error) {
 				return true
 			},
 		},
-		markdown: markdown.NewParser(),
+		markdown:  markdown.NewParser(),
+		templates: template.Must(template.New("rwtxt").Funcs(funcMap).ParseFS(_templates, "templates/*.html")),
 	}
-
-	funcMap := template.FuncMap{
-		"replace": replace,
-	}
-
-	var err error
-	headerFooter := []string{"assets/header.html", "assets/footer.html"}
-
-	b, err := Asset("assets/viewedit.html")
-	if err != nil {
-		return nil, err
-	}
-	rwt.viewEditTemplate = template.Must(template.New("viewedit").Parse(string(b)))
-
-	err = templateAssets(headerFooter, rwt.viewEditTemplate)
-
-	b, err = Asset("assets/main.html")
-	if err != nil {
-		return nil, err
-	}
-
-	rwt.mainTemplate = template.Must(template.New("main").Funcs(funcMap).Parse(string(b)))
-
-	err = templateAssets(headerFooter, rwt.mainTemplate)
-
-	b, err = Asset("assets/list.html")
-	if err != nil {
-		return nil, err
-	}
-	rwt.listTemplate = template.Must(template.New("list").Parse(string(b)))
-
-	err = templateAssets(headerFooter, rwt.listTemplate)
-
-	return rwt, err
-}
-
-func templateAssets(s []string, t *template.Template) error {
-	for _, asset := range s {
-		b, err := Asset(asset)
-		if err != nil {
-			return err
-		}
-
-		t = template.Must(t.Parse(string(b)))
-	}
-	return nil
 }
 
 func (rwt *RWTxt) Serve() (err error) {
@@ -262,37 +210,8 @@ Disallow: /`))
 }
 
 func (rwt *RWTxt) handleStatic(w http.ResponseWriter, r *http.Request) (err error) {
-	page := r.URL.Path
-	e := `"` + r.URL.Path + `"`
-
-	// https://www.sanarias.com/blog/115LearningHTTPcachinginGo
-	w.Header().Set("Vary", "Accept-Encoding")
-	w.Header().Set("Etag", e)
-	w.Header().Set("Cache-Control", "max-age=2592000") // 30 days
-	if match := r.Header.Get("If-None-Match"); match != "" {
-		if strings.Contains(match, e) {
-			w.WriteHeader(http.StatusNotModified)
-			return
-		}
-	}
-
-	w.Header().Set("Content-Encoding", "gzip")
-	if strings.HasPrefix(page, "/static") {
-		page = "assets/" + strings.TrimPrefix(page, "/static/")
-		b, _ := Asset(page + ".gz")
-		if strings.Contains(page, ".js") {
-			w.Header().Set("Content-Type", "text/javascript")
-		} else if strings.Contains(page, ".css") {
-			w.Header().Set("Content-Type", "text/css")
-		} else if strings.Contains(page, ".png") {
-			w.Header().Set("Content-Type", "image/png")
-		} else if strings.Contains(page, ".json") {
-			w.Header().Set("Content-Type", "application/json")
-		}
-		w.Write(b)
-	}
-
-	return
+	http.FileServer(http.FS(_static)).ServeHTTP(w, r)
+	return nil
 }
 
 // createPage throws error if domain does not exist
