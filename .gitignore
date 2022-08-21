@@ -19,5 +19,5 @@ rwtxt
 /vendor
 
 # RWTxt databases
-*db
+*.db
 *.db.sql.gz
