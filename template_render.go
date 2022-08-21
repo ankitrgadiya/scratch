@@ -289,7 +289,10 @@ func (tr *TemplateRender) handleMain(w http.ResponseWriter, r *http.Request) (er
 	tr.DomainValue = template.HTMLAttr(`value="` + tr.Domain + `"`)
 	tr.RenderTime = time.Now().UTC()
 	if tr.Options.CustomIntro != "" {
-		tr.CustomIntro = template.HTML(utils.RenderMarkdownToHTML(tr.Options.CustomIntro))
+		tr.CustomIntro, err = tr.rwt.markdown.Convert(tr.Options.CustomIntro)
+		if err != nil {
+			return err
+		}
 	}
 	if tr.Options.CSS != "" {
 		tr.CustomCSS = template.CSS(tr.Options.CSS)
@@ -688,15 +691,18 @@ func (tr *TemplateRender) handleViewEdit(w http.ResponseWriter, r *http.Request)
 		slug = f.ID
 	}
 	tr.Title = slug + " | " + domain
-	initialMarkdown = strings.Replace(initialMarkdown, "- [ ]", "- ☐", -1)
-	initialMarkdown = strings.Replace(initialMarkdown, "- [x]", "- 🗹", -1)
-	tr.Rendered = utils.RenderMarkdownToHTML(initialMarkdown)
+	// initialMarkdown = strings.Replace(initialMarkdown, "- [ ]", "- ☐", -1)
+	// initialMarkdown = strings.Replace(initialMarkdown, "- [x]", "- 🗹", -1)
+	tr.Rendered, err = tr.rwt.markdown.Convert(initialMarkdown)
+	if err != nil {
+		return err
+	}
 	if tr.Options.CSS != "" {
 		tr.CustomCSS = template.CSS(tr.Options.CSS)
 	}
 
 	tr.IntroText = template.JS(introText)
-	tr.Rows = len(strings.Split(string(utils.RenderMarkdownToHTML(initialMarkdown)), "\n")) + 1
+	tr.Rows = len(strings.Split(string(tr.Rendered), "\n")) + 1
 	tr.EditOnly = strings.TrimSpace(f.Data) == ""
 	tr.Languages = utils.DetectMarkdownCodeBlockLanguages(initialMarkdown)
 	log.Debugf("processed %s content in %s", tr.Page, time.Since(timerStart))

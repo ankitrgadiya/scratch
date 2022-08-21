@@ -2,36 +2,16 @@ package utils
 
 import (
 	"archive/zip"
-	"bytes"
 	"crypto/hmac"
 	"crypto/sha512"
 	"encoding/hex"
-	"html/template"
 	"io"
 	"math/rand"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/abhinav/goldmark-wikilink"
-	"github.com/microcosm-cc/bluemonday"
-	"github.com/yuin/goldmark"
-	emoji "github.com/yuin/goldmark-emoji"
-	"github.com/yuin/goldmark/extension"
-	"github.com/yuin/goldmark/parser"
-	"github.com/yuin/goldmark/renderer/html"
 	"golang.org/x/crypto/bcrypt"
-)
-
-var md = goldmark.New(
-	goldmark.WithExtensions(extension.GFM, extension.Footnote, emoji.Emoji, &wikilink.Extender{}),
-	goldmark.WithParserOptions(
-		parser.WithAutoHeadingID(),
-	),
-	goldmark.WithRendererOptions(
-		html.WithHardWraps(),
-		html.WithXHTML(),
-	),
 )
 
 // ZipFiles will zip files to filename
@@ -83,22 +63,6 @@ func ZipFiles(filename string, files []string) error {
 		}
 	}
 	return nil
-}
-func RenderMarkdownToHTML(markdown string) template.HTML {
-	var buf bytes.Buffer
-	if err := md.Convert([]byte(markdown), &buf); err != nil {
-		return template.HTML("")
-	}
-
-	p := bluemonday.UGCPolicy()
-	p.AllowAttrs("href").OnElements("a")
-	p.AllowAttrs("class").OnElements("a")
-	p.AllowAttrs("style").OnElements("span")
-	p.AllowAttrs("class").OnElements("code")
-	p.AllowElements("p")
-	html := p.Sanitize(buf.String())
-
-	return template.HTML(html)
 }
 
 var src = rand.NewSource(time.Now().UTC().UnixNano())
