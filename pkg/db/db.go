@@ -132,7 +132,7 @@ func (fs *FileSystem) InitializeDB(dump bool) (err error) {
 	}
 
 	sqlStmt = `CREATE VIRTUAL TABLE IF NOT EXISTS 
-		fts USING fts4 (id,data);`
+		fts USING fts5 (id,data);`
 	_, err = fs.DB.Exec(sqlStmt)
 	if err != nil {
 		err = errors.Wrap(err, "creating virtual table")

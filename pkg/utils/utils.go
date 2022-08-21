@@ -2,6 +2,7 @@ package utils
 
 import (
 	"archive/zip"
+	"bytes"
 	"crypto/hmac"
 	"crypto/sha512"
 	"encoding/hex"
@@ -12,9 +13,25 @@ import (
 	"strings"
 	"time"
 
+	"github.com/abhinav/goldmark-wikilink"
 	"github.com/microcosm-cc/bluemonday"
-	blackfriday "github.com/russross/blackfriday/v2"
+	"github.com/yuin/goldmark"
+	emoji "github.com/yuin/goldmark-emoji"
+	"github.com/yuin/goldmark/extension"
+	"github.com/yuin/goldmark/parser"
+	"github.com/yuin/goldmark/renderer/html"
 	"golang.org/x/crypto/bcrypt"
+)
+
+var md = goldmark.New(
+	goldmark.WithExtensions(extension.GFM, extension.Footnote, emoji.Emoji, &wikilink.Extender{}),
+	goldmark.WithParserOptions(
+		parser.WithAutoHeadingID(),
+	),
+	goldmark.WithRendererOptions(
+		html.WithHardWraps(),
+		html.WithXHTML(),
+	),
 )
 
 // ZipFiles will zip files to filename
@@ -68,18 +85,10 @@ func ZipFiles(filename string, files []string) error {
 	return nil
 }
 func RenderMarkdownToHTML(markdown string) template.HTML {
-	html := string(blackfriday.Run([]byte(markdown),
-		blackfriday.WithExtensions(
-			blackfriday.Autolink|
-				blackfriday.Strikethrough|
-				blackfriday.SpaceHeadings|
-				blackfriday.BackslashLineBreak|
-				blackfriday.NoIntraEmphasis|
-				blackfriday.Tables|
-				blackfriday.FencedCode|
-				blackfriday.AutoHeadingIDs|
-				blackfriday.Footnotes),
-	))
+	var buf bytes.Buffer
+	if err := md.Convert([]byte(markdown), &buf); err != nil {
+		return template.HTML("")
+	}
 
 	p := bluemonday.UGCPolicy()
 	p.AllowAttrs("href").OnElements("a")
@@ -87,7 +96,7 @@ func RenderMarkdownToHTML(markdown string) template.HTML {
 	p.AllowAttrs("style").OnElements("span")
 	p.AllowAttrs("class").OnElements("code")
 	p.AllowElements("p")
-	html = p.Sanitize(html)
+	html := p.Sanitize(buf.String())
 
 	return template.HTML(html)
 }
