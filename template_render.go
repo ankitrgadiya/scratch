@@ -11,12 +11,10 @@ import (
 	"html/template"
 	"image/jpeg"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/disintegration/imaging"
@@ -99,7 +97,7 @@ func init() {
 
 	languageCSS = make(map[string]string)
 	currentLanguage := ""
-	for _, line := range strings.Split(string(resB.Bytes()), "\n") {
+	for _, line := range strings.Split(resB.String(), "\n") {
 		line = strings.TrimSpace(line)
 		if len(line) == 0 {
 			continue
@@ -459,12 +457,6 @@ func (tr *TemplateRender) handleWebsocket(w http.ResponseWriter, r *http.Request
 			log.Debug("read:", err)
 			if editFile.ID != "" {
 				log.Debugf("saving editing of /%s/%s", editFile.Domain, editFile.ID)
-				if editFile.Domain != "public" {
-					err = tr.rwt.addSimilar(editFile.Domain, editFile.ID)
-					if err != nil {
-						log.Error(err)
-					}
-				}
 			}
 			break
 		}
@@ -562,46 +554,7 @@ func (tr *TemplateRender) handleViewEdit(w http.ResponseWriter, r *http.Request)
 	showRaw := r.URL.Query().Get("raw") != ""
 	log.Debugf("raw page: '%v'", showRaw)
 
-	// load from cache
-	// if !many {
-	// 	var trBytes []byte
-	// 	trBytes, err = tr.rwt.fs.GetCacheHTML(pageID)
-	// 	if err == nil {
-	// 		err = json.Unmarshal(trBytes, &tr)
-	// 		if err != nil {
-	// 			log.Error(err)
-	// 		} else {
-	// 			log.Debug("using cache")
-	// 			if showRaw {
-	// 				w.Header().Set("Content-Encoding", "gzip")
-	// 				w.Header().Set("Content-Type", "text/plain")
-	// 				gz := gzip.NewWriter(w)
-	// 				defer gz.Close()
-	// 				_, err = gz.Write([]byte(tr.File.Data))
-	// 				return
-	// 			}
-	// 			w.Header().Set("Content-Encoding", "gzip")
-	// 			w.Header().Set("Content-Type", "text/html")
-	// 			gz := gzip.NewWriter(w)
-	// 			defer gz.Close()
-	// 			return tr.rwt.viewEditTemplate.Execute(gz, tr)
-	// 		}
-	// 	}
-	// }
-
 	if pageID != "" {
-		var wg sync.WaitGroup
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			timerStart = time.Now().UTC()
-			tr.SimilarFiles, err = tr.rwt.fs.GetSimilar(pageID)
-			if err != nil {
-				log.Error(err)
-			}
-			log.Debugf("got %s similar in %s", tr.Page, time.Since(timerStart))
-		}()
-
 		var files []db.File
 		timerStart = time.Now().UTC()
 		if !many {
@@ -620,7 +573,6 @@ func (tr *TemplateRender) handleViewEdit(w http.ResponseWriter, r *http.Request)
 			f = files[0]
 		}
 		log.Debugf("got %s content in %s", tr.Page, time.Since(timerStart))
-		wg.Wait()
 	} else {
 		uuid := utils.UUID()
 		f = db.File{
@@ -883,7 +835,7 @@ func (tr *TemplateRender) handleUpload(w http.ResponseWriter, r *http.Request) (
 		return err
 	} else {
 		log.Debug("process standard upload")
-		b, err := ioutil.ReadAll(file)
+		b, err := io.ReadAll(file)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return err

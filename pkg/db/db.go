@@ -1,72 +1,23 @@
 package db
 
 import (
-	"bufio"
 	"bytes"
 	"compress/gzip"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"html/template"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	log "github.com/cihub/seelog"
 	"github.com/pkg/errors"
 	"github.com/schollz/rwtxt/pkg/utils"
-	"github.com/schollz/sqlite3dump"
 	"github.com/schollz/versionedtext"
 )
-
-type FileSystem struct {
-	Name string
-	DB   *sql.DB
-	sync.RWMutex
-}
-
-// File is the basic unit that is saved
-type File struct {
-	ID       string                      `json:"id"`
-	Slug     string                      `json:"slug"`
-	Created  time.Time                   `json:"created"`
-	Modified time.Time                   `json:"modified"`
-	Data     string                      `json:"data"`
-	Domain   string                      `json:"domain"`
-	History  versionedtext.VersionedText `json:"history"`
-	DataHTML template.HTML               `json:"data_html,omitempty"`
-	Views    int                         `json:"views"`
-}
-
-type DomainOptions struct {
-	MostEdited  int
-	MostRecent  int
-	LastCreated int
-	CSS         string
-	CustomIntro string
-	CustomTitle string
-	ShowSearch  bool
-}
-
-func formattedDate(t time.Time, utcOffset int) string {
-	loc, err := time.LoadLocation(fmt.Sprintf("Etc/GMT%+d", utcOffset))
-	if err != nil {
-		return t.Format("3:04pm Jan 2 2006")
-	}
-	return t.In(loc).Format("3:04pm Jan 2 2006")
-}
-
-func (f File) CreatedDate(utcOffset int) string {
-	return formattedDate(f.Created, utcOffset)
-}
-
-func (f File) ModifiedDate(utcOffset int) string {
-	return formattedDate(f.Modified, utcOffset)
-}
 
 // New will initialize a filesystem by creating DB and calling InitializeDB.
 // Callers should ensure "github.com/mattn/go-sqlite3" is imported in some way
@@ -83,7 +34,7 @@ func New(name string) (fs *FileSystem, err error) {
 	if err != nil {
 		return
 	}
-	err = fs.InitializeDB(true)
+	err = fs.InitializeDB()
 	if err != nil {
 		err = errors.Wrap(err, "could not initialize")
 		return
@@ -94,28 +45,8 @@ func New(name string) (fs *FileSystem, err error) {
 
 // InitializeDB will initialize schema if not already done and if dump is true,
 // will create the an initial DB dump. This is automatically called by New.
-func (fs *FileSystem) InitializeDB(dump bool) (err error) {
-	// if _, errHaveSQL := os.Stat(fs.Name + ".sql.gz"); errHaveSQL == nil {
-	// 	fi, err := os.Open(fs.Name + ".sql.gz")
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// 	defer fi.Close()
-
-	// 	fz, err := gzip.NewReader(fi)
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// 	defer fz.Close()
-
-	// 	s, err := ioutil.ReadAll(fz)
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// 	_, err = fs.DB.Exec(string(s))
-	// 	return err
-	// }
-	sqlStmt := `CREATE TABLE IF NOT EXISTS 
+func (fs *FileSystem) InitializeDB() (err error) {
+	sqlStmt := `CREATE TABLE IF NOT EXISTS
 		fs (
 			id TEXT NOT NULL PRIMARY KEY,
 			domainid INTEGER,
@@ -175,17 +106,6 @@ func (fs *FileSystem) InitializeDB(dump bool) (err error) {
 		err = errors.Wrap(err, "creating domains table")
 	}
 
-	sqlStmt = `CREATE TABLE IF NOT EXISTS
-	similar (
-		id INTEGER NOT NULL PRIMARY KEY,
-		fsid TEXT,
-		fsid_similar TEXT
-	);`
-	_, err = fs.DB.Exec(sqlStmt)
-	if err != nil {
-		err = errors.Wrap(err, "creating similarities table")
-	}
-
 	sqlStmt = `DROP TABLE IF EXISTS	cached_images;`
 	_, err = fs.DB.Exec(sqlStmt)
 	if err != nil {
@@ -235,49 +155,12 @@ func (fs *FileSystem) InitializeDB(dump bool) (err error) {
 		err = errors.Wrap(err, "creating index")
 	}
 
-	sqlStmt = `CREATE INDEX IF NOT EXISTS
-	similarid ON similar(fsid);`
-	_, err = fs.DB.Exec(sqlStmt)
-	if err != nil {
-		err = errors.Wrap(err, "creating index")
-	}
-
 	domainid, _, _, _, _ := fs.getDomainFromName("public")
 	if domainid == 0 {
 		fs.setDomain("public", "")
 		fs.UpdateDomain("public", "", true, DomainOptions{})
 	}
 
-	if dump {
-		fs.DumpSQL()
-	}
-	return
-}
-
-// DumpSQL will dump the SQL as text to filename.sql.gz
-func (fs *FileSystem) DumpSQL() (err error) {
-	fs.Lock()
-	defer fs.Unlock()
-
-	// first purge the database of old stuff
-	_, err = fs.DB.Exec(`
-	DELETE FROM fs WHERE id IN (SELECT id FROM fts where data == '');
-	DELETE FROM fts WHERE data = '';
-	`)
-	if err != nil {
-		return
-	}
-
-	fi, err := os.Create(fs.Name + ".sql.gz")
-	if err != nil {
-		return
-	}
-	gf := gzip.NewWriter(fi)
-	fw := bufio.NewWriter(gf)
-	err = sqlite3dump.DumpMigration(fs.DB, fw)
-	fw.Flush()
-	gf.Close()
-	fi.Close()
 	return
 }
 
@@ -348,7 +231,7 @@ func (fs *FileSystem) ExportPosts() error {
 			return err
 		}
 		for _, file := range files {
-			fname := (fmt.Sprintf("%s-%s.md", file.Slug, file.ID))
+			fname := fmt.Sprintf("%s-%s.md", file.Slug, file.ID)
 			r := strings.NewReader(file.Data)
 			if err != nil {
 				return err
@@ -363,7 +246,7 @@ func (fs *FileSystem) ExportPosts() error {
 				return err
 			}
 			fpath := filepath.Join(dir, domain, fname)
-			err = ioutil.WriteFile(fpath, buf.Bytes(), os.ModePerm)
+			err = os.WriteFile(fpath, buf.Bytes(), os.ModePerm)
 			if err != nil {
 				return err
 			}
@@ -407,7 +290,7 @@ func (fs *FileSystem) ExportUploads() error {
 			return err
 		}
 		fpath := filepath.Join(dir, fname)
-		err = ioutil.WriteFile(fpath, buf.Bytes(), os.ModePerm)
+		err = os.WriteFile(fpath, buf.Bytes(), os.ModePerm)
 		if err != nil {
 			return err
 		}
@@ -733,42 +616,6 @@ func (fs *FileSystem) Close() (err error) {
 	return fs.DB.Close()
 }
 
-// Len returns how many things
-func (fs *FileSystem) Len() (l int, err error) {
-	fs.Lock()
-	defer fs.Unlock()
-
-	// prepare statement
-	query := "SELECT COUNT(id) FROM FS"
-	stmt, err := fs.DB.Prepare(query)
-	if err != nil {
-		err = errors.Wrap(err, "preparing query: "+query)
-		return
-	}
-
-	defer stmt.Close()
-	rows, err := stmt.Query()
-	if err != nil {
-		err = errors.Wrap(err, query)
-		return
-	}
-
-	// loop through rows
-	defer rows.Close()
-	for rows.Next() {
-		err = rows.Scan(&l)
-		if err != nil {
-			err = errors.Wrap(err, "getRows")
-			return
-		}
-	}
-	err = rows.Err()
-	if err != nil {
-		err = errors.Wrap(err, "getRows")
-	}
-	return
-}
-
 // SetKey will set the key of a domain, throws an error if it already exists
 func (fs *FileSystem) SetKey(domain, password string) (key string, err error) {
 	// first check if it is a domain
@@ -800,38 +647,6 @@ func (fs *FileSystem) SetKey(domain, password string) (key string, err error) {
 	return
 }
 
-// DeleteOldKeys deletes keys older than 5 days
-func (fs *FileSystem) DeleteOldKeys() (err error) {
-	// first check if it is a domain
-	fs.Lock()
-	defer fs.Unlock()
-
-	// first purge the database of old stuff
-	stmt, err := fs.DB.Prepare(`DELETE FROM keys WHERE lastused <= DATETIME('now','-5 days')`)
-	if err != nil {
-		return
-	}
-	defer stmt.Close()
-	_, err = stmt.Exec()
-	return
-}
-
-// DeleteKey deletes a specific key
-func (fs *FileSystem) DeleteKey(key string) (err error) {
-	// first check if it is a domain
-	fs.Lock()
-	defer fs.Unlock()
-
-	// first purge the database of old stuff
-	stmt, err := fs.DB.Prepare(`DELETE FROM keys WHERE key=?;`)
-	if err != nil {
-		return
-	}
-	defer stmt.Close()
-	_, err = stmt.Exec(key)
-	return
-}
-
 func (fs *FileSystem) UpdateViews(f File) (err error) {
 	fs.Lock()
 	defer fs.Unlock()
@@ -854,34 +669,10 @@ func (fs *FileSystem) UpdateViews(f File) (err error) {
 	return
 }
 
-// CheckKeys checks that it is a valid key for a domain
-func (fs *FileSystem) CheckKeys(keys []string) (domains []string, validKeys []string, err error) {
-	fs.Lock()
-	defer fs.Unlock()
-
-	domains = make([]string, len(keys))
-	validKeys = make([]string, len(keys))
-	i := 0
-	for _, key := range keys {
-		_, domain, err := fs.checkKey(key)
-		if err != nil || domain == "" {
-			continue
-		}
-		domains[i] = domain
-		validKeys[i] = key
-		i++
-	}
-	return
-}
-
 // CheckKey checks that it is a valid key for a domain
 func (fs *FileSystem) CheckKey(key string) (domainid int, domain string, err error) {
 	fs.Lock()
 	defer fs.Unlock()
-	return fs.checkKey(key)
-}
-
-func (fs *FileSystem) checkKey(key string) (domainid int, domain string, err error) {
 	stmt, err := fs.DB.Prepare(`
 	SELECT 
 	domains.id, domains.name
@@ -1038,115 +829,6 @@ func (fs *FileSystem) UpdateDomain(domain, password string, ispublic bool, optio
 	return
 }
 
-// SetCacheHTML will set the html cache
-func (fs *FileSystem) SetCacheHTML(id string, tr []byte) (err error) {
-	fs.Lock()
-	defer fs.Unlock()
-
-	tx, err := fs.DB.Begin()
-	if err != nil {
-		return errors.Wrap(err, "begin SetCache")
-	}
-
-	stmt, err := tx.Prepare(`
-	INSERT OR REPLACE INTO cached_html (id,modified,tr) VALUES (?,?,?)`)
-	if err != nil {
-		return errors.Wrap(err, "stmt Save SetCache")
-	}
-
-	_, err = stmt.Exec(id, time.Now().UTC(), tr)
-	if err != nil {
-		return errors.Wrap(err, "exec Save SetCache")
-	}
-	defer stmt.Close()
-	err = tx.Commit()
-	if err != nil {
-		return errors.Wrap(err, "commit Save SetCache")
-	}
-	return
-}
-
-// SetCacheHTML will set the html cache
-func (fs *FileSystem) GetCacheHTML(id string, noCheckLastModified ...bool) (tr []byte, err error) {
-	fs.Lock()
-	defer fs.Unlock()
-
-	doCheckLastModified := true
-	if len(noCheckLastModified) > 0 {
-		doCheckLastModified = !noCheckLastModified[0]
-	}
-
-	var fsLastModified time.Time
-	if doCheckLastModified {
-		fsLastModified, err = func(id string) (fsLastModified time.Time, err error) {
-			// prepare statement
-			stmt, err := fs.DB.Prepare("SELECT modified FROM fs WHERE id=?")
-			if err != nil {
-				err = errors.Wrap(err, "preparing query")
-				return
-			}
-
-			defer stmt.Close()
-			rows, err := stmt.Query(id)
-			if err != nil {
-				return
-			}
-
-			// loop through rows
-			defer rows.Close()
-
-			for rows.Next() {
-				err = rows.Scan(
-					&fsLastModified,
-				)
-				return
-			}
-			err = fmt.Errorf("found nothing")
-			return
-		}(id)
-		if err != nil {
-			return
-		}
-	}
-
-	// prepare statement
-	stmt, err := fs.DB.Prepare("SELECT modified,tr FROM cached_html WHERE id=?")
-	if err != nil {
-		err = errors.Wrap(err, "preparing query")
-		return
-	}
-
-	defer stmt.Close()
-	rows, err := stmt.Query(id)
-	if err != nil {
-		return
-	}
-	// loop through rows
-	defer rows.Close()
-	var cacheLastModified time.Time
-	for rows.Next() {
-		err = rows.Scan(
-			&cacheLastModified,
-			&tr,
-		)
-		if err != nil {
-			return
-		}
-	}
-	if doCheckLastModified && fsLastModified.After(cacheLastModified) {
-		err = fmt.Errorf("cache is not new")
-	}
-
-	return
-}
-
-// ValidateDomain returns the domain id or an error if the password doesn't match or if the domain doesn't exist
-func (fs *FileSystem) ValidateDomain(domain, password string) (domainid int, options DomainOptions, err error) {
-	fs.Lock()
-	defer fs.Unlock()
-	return fs.validateDomain(domain, password)
-}
-
 // ValidateDomain returns the domain id or an error if the password doesn't match or if the domain doesn't exist
 func (fs *FileSystem) validateDomain(domain, password string) (domainid int, options DomainOptions, err error) {
 	domain = strings.ToLower(domain)
@@ -1215,55 +897,6 @@ func (fs *FileSystem) getDomainFromName(domain string) (domainid int, hashedPass
 	return
 }
 
-func (fs *FileSystem) SetSimilar(id string, similarids []string) (err error) {
-	// first purge the database of previous similarities
-	stmt, err := fs.DB.Prepare(`DELETE FROM similar WHERE fsid=?;`)
-	if err != nil {
-		return
-	}
-	_, err = stmt.Exec(id)
-	stmt.Close()
-	if err != nil {
-		return
-	}
-
-	for _, similarid := range similarids {
-		// inset new similarities
-		tx, err := fs.DB.Begin()
-		if err != nil {
-			return errors.Wrap(err, "begin setsmiilar")
-		}
-		stmt, err := tx.Prepare(`
-	INSERT OR REPLACE INTO
-		similar
-	(
-		fsid,
-		fsid_similar
-	) 
-		VALUES 	
-	(
-		?,
-		?
-	)`)
-		if err != nil {
-			return errors.Wrap(err, "stmt setsimilar")
-		}
-		_, err = stmt.Exec(
-			id, similarid,
-		)
-		if err != nil {
-			return errors.Wrap(err, "exec setsimilar")
-		}
-		defer stmt.Close()
-		err = tx.Commit()
-		if err != nil {
-			return errors.Wrap(err, "commit setsimilar")
-		}
-	}
-
-	return
-}
-
 // GetAll returns all the files for a given domain
 func (fs *FileSystem) GetAll(domain string, created ...bool) (files []File, err error) {
 	fs.Lock()
@@ -1285,18 +918,6 @@ func (fs *FileSystem) GetAll(domain string, created ...bool) (files []File, err 
 		files[i].Domain = domain
 	}
 	return
-}
-
-// GetSimilar returns all the files for a given domain
-func (fs *FileSystem) GetSimilar(fileid string) (files []File, err error) {
-	return fs.getAllFromPreparedQuery(`
-	SELECT fs.id,fs.slug,fs.created,fs.modified,fts.data,fs.history,fs.views FROM fs 
-	INNER JOIN fts ON fs.id=fts.id 
-	WHERE 
-		fs.id IN (
-			SELECT fsid_similar FROM similar WHERE fsid = ?
-		)
-	ORDER BY fs.modified DESC`, fileid)
 }
 
 // GetTopX returns the info from a file
@@ -1455,28 +1076,6 @@ func (fs *FileSystem) isID(id string) (exists bool, err error) {
 	return
 }
 
-// LatestEntryFromDomainID returns the last entry date for the current domain
-func (fs *FileSystem) LatestEntryFromDomainID(domainid int) (latest time.Time, err error) {
-	if domainid == 0 {
-		err = fmt.Errorf("cannot get latest entry from public")
-		return
-	}
-
-	timestamps, err := fs.getAllFromPreparedQuerySingleTimestamp(`
-		SELECT modified FROM fs WHERE domainid = ? AND views > 0 ORDER BY modified DESC LIMIT 1
-	`, domainid)
-	if err != nil {
-		err = errors.Wrap(err, "getAllFromPreparedQuerySingleTimestamp")
-		return
-	}
-	if len(timestamps) > 0 {
-		latest = timestamps[0]
-	} else {
-		err = fmt.Errorf("found no entries")
-	}
-	return
-}
-
 // Exists returns whether specified id or slug exists
 func (fs *FileSystem) Exists(id string, domain string) (trueID string, many bool, err error) {
 	// timeStart := time.Now().UTC()
@@ -1514,7 +1113,7 @@ func (fs *FileSystem) Exists(id string, domain string) (trueID string, many bool
 	return
 }
 
-func (fs *FileSystem) getAllFromPreparedQuery(query string, args ...interface{}) (files []File, err error) {
+func (fs *FileSystem) getAllFromPreparedQuery(query string, args ...any) (files []File, err error) {
 	// timeStart := time.Now().UTC()
 	// defer func() {
 	// 	log.Debugf("getAllFromPreparedQuery %s in %s", query, time.Since(timeStart))
@@ -1688,4 +1287,12 @@ func SetLogLevel(level string) (err error) {
 	}
 	log.ReplaceLogger(logger)
 	return
+}
+
+func formattedDate(t time.Time, utcOffset int) string {
+	loc, err := time.LoadLocation(fmt.Sprintf("Etc/GMT%+d", utcOffset))
+	if err != nil {
+		return t.Format("3:04pm Jan 2 2006")
+	}
+	return t.In(loc).Format("3:04pm Jan 2 2006")
 }

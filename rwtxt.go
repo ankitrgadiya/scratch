@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/schollz/documentsimilarity"
 	log "github.com/schollz/logger"
 	"github.com/schollz/rwtxt/pkg/db"
 	"github.com/schollz/rwtxt/pkg/markdown"
@@ -115,28 +114,6 @@ func templateAssets(s []string, t *template.Template) error {
 }
 
 func (rwt *RWTxt) Serve() (err error) {
-	go func() {
-		lastDumped := time.Now().UTC()
-		for {
-			time.Sleep(120 * time.Second)
-			lastModified, errGet := rwt.fs.LastModified()
-			if errGet != nil {
-				panic(errGet)
-			}
-			if time.Since(lastModified).Seconds() > 3 && time.Since(lastDumped).Seconds() > 10 {
-				log.Debug("dumping")
-				errDelete := rwt.fs.DeleteOldKeys()
-				if errDelete != nil {
-					log.Error(errDelete)
-				}
-				errDump := rwt.fs.DumpSQL()
-				if errDump != nil {
-					log.Error(errDump)
-				}
-				lastDumped = time.Now().UTC()
-			}
-		}
-	}()
 	log.Infof("listening on %v", rwt.Config.Bind)
 	http.HandleFunc("/", rwt.Handler)
 	return http.ListenAndServe(rwt.Config.Bind, nil)
@@ -318,7 +295,7 @@ func (rwt *RWTxt) handleStatic(w http.ResponseWriter, r *http.Request) (err erro
 	page := r.URL.Path
 	e := `"` + r.URL.Path + `"`
 
-	//https://www.sanarias.com/blog/115LearningHTTPcachinginGo
+	// https://www.sanarias.com/blog/115LearningHTTPcachinginGo
 	w.Header().Set("Vary", "Accept-Encoding")
 	w.Header().Set("Etag", e)
 	w.Header().Set("Cache-Control", "max-age=2592000") // 30 days
@@ -360,41 +337,5 @@ func (rwt *RWTxt) createPage(domain string) (f db.File) {
 	if err != nil {
 		log.Debug(err)
 	}
-	return
-}
-
-func (rwt *RWTxt) addSimilar(domain string, fileid string) (err error) {
-	files, err := rwt.fs.GetAll(domain)
-	documents := []string{}
-	ids := []string{}
-	maindocument := ""
-	for _, file := range files {
-		if file.ID == fileid {
-			maindocument = file.Data
-			continue
-		}
-		ids = append(ids, file.ID)
-		documents = append(documents, file.Data)
-	}
-
-	ds, err := documentsimilarity.New(documents)
-	if err != nil {
-		return
-	}
-
-	similarities, err := ds.JaccardSimilarity(maindocument)
-	if err != nil {
-		return
-	}
-
-	if len(similarities) > 5 {
-		similarities = similarities[:5]
-	}
-	similarIds := make([]string, len(similarities))
-	for i, similarity := range similarities {
-		similarIds[i] = ids[similarity.Index]
-	}
-
-	err = rwt.fs.SetSimilar(fileid, similarIds)
 	return
 }
