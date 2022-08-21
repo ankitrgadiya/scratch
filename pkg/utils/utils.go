@@ -8,7 +8,6 @@ import (
 	"io"
 	"math/rand"
 	"os"
-	"strings"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -118,27 +117,4 @@ func CheckPasswordHash(hash, password string) error {
 		return err
 	}
 	return bcrypt.CompareHashAndPassword(hashB, []byte(password))
-}
-
-// DetectMarkdownCodeBlockLanguages detects and returns programming languages used in
-// code blocks
-func DetectMarkdownCodeBlockLanguages(markdown string) (codeblocks []string) {
-	codeblocksMap := make(map[string]struct{})
-	for _, line := range strings.Split(markdown, "\n") {
-		line = strings.TrimSpace(line)
-		if len(line) <= 3 {
-			continue
-		}
-		if !strings.HasPrefix(line, "```") {
-			continue
-		}
-		codeblocksMap[strings.ToLower(strings.TrimSpace(strings.TrimPrefix(line, "```")))] = struct{}{}
-	}
-	codeblocks = make([]string, len(codeblocksMap))
-	i := 0
-	for key := range codeblocksMap {
-		codeblocks[i] = key
-		i++
-	}
-	return
 }

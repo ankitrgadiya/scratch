@@ -78,45 +78,6 @@ type Payload struct {
 	Success   bool   `json:"success"`
 }
 
-func init() {
-	b, err := Asset("assets/js/languages.js.gz")
-	if err != nil {
-		panic(err)
-	}
-	b2 := bytes.NewBuffer(b)
-	var r io.Reader
-	r, err = gzip.NewReader(b2)
-	if err != nil {
-		panic(err)
-	}
-	var resB bytes.Buffer
-	_, err = resB.ReadFrom(r)
-	if err != nil {
-		panic(err)
-	}
-
-	languageCSS = make(map[string]string)
-	currentLanguage := ""
-	for _, line := range strings.Split(resB.String(), "\n") {
-		line = strings.TrimSpace(line)
-		if len(line) == 0 {
-			continue
-		}
-		if strings.HasPrefix(line, "Prism.languages.") {
-			language := strings.TrimPrefix(strings.Split(line, "=")[0], "Prism.languages.")
-			if len(language) < 30 {
-				currentLanguage = language
-			}
-		}
-		if currentLanguage != "" {
-			if _, ok := languageCSS[currentLanguage]; !ok {
-				languageCSS[currentLanguage] = ""
-			}
-			languageCSS[currentLanguage] += line + "\n"
-		}
-	}
-}
-
 func NewTemplateRender(rwt *RWTxt) *TemplateRender {
 	tr := &TemplateRender{
 		rwt:         rwt,
@@ -656,7 +617,6 @@ func (tr *TemplateRender) handleViewEdit(w http.ResponseWriter, r *http.Request)
 	tr.IntroText = template.JS(introText)
 	tr.Rows = len(strings.Split(string(tr.Rendered), "\n")) + 1
 	tr.EditOnly = strings.TrimSpace(f.Data) == ""
-	tr.Languages = utils.DetectMarkdownCodeBlockLanguages(initialMarkdown)
 	log.Debugf("processed %s content in %s", tr.Page, time.Since(timerStart))
 
 	// go func() {

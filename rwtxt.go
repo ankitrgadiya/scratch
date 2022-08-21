@@ -1,7 +1,6 @@
 package rwtxt
 
 import (
-	"compress/gzip"
 	"encoding/base64"
 	"fmt"
 	"html/template"
@@ -25,7 +24,6 @@ type RWTxt struct {
 	mainTemplate     *template.Template
 	loginTemplate    *template.Template
 	listTemplate     *template.Template
-	prismTemplate    []string
 	fs               *db.FileSystem
 	markdown         *markdown.Parser
 	wsupgrader       websocket.Upgrader
@@ -91,12 +89,6 @@ func New(fs *db.FileSystem, configUser ...Config) (*RWTxt, error) {
 	rwt.listTemplate = template.Must(template.New("list").Parse(string(b)))
 
 	err = templateAssets(headerFooter, rwt.listTemplate)
-
-	b, err = Asset("assets/prism.js")
-	if err != nil {
-		return nil, err
-	}
-	rwt.prismTemplate = strings.Split(string(b), "LANGUAGES")
 
 	return rwt, err
 }
@@ -189,8 +181,6 @@ Disallow: /`))
 		// TODO
 	} else if r.URL.Path == "/sitemap.xml" {
 		// TODO
-	} else if strings.HasPrefix(r.URL.Path, "/prism.js") {
-		return rwt.handlePrism(w, r)
 	} else if strings.HasPrefix(r.URL.Path, "/static") {
 		// special path /static
 		return rwt.handleStatic(w, r)
@@ -268,26 +258,6 @@ Disallow: /`))
 		}
 		return tr.handleViewEdit(w, r)
 	}
-	return
-}
-
-func (rwt *RWTxt) handlePrism(w http.ResponseWriter, r *http.Request) (err error) {
-	prismJS := rwt.prismTemplate[0]
-	languageString, ok := r.URL.Query()["l"]
-	if ok && len(languageString) > 0 {
-		for _, lang := range strings.Split(languageString[0], ",") {
-			if _, ok2 := languageCSS[lang]; ok2 {
-				prismJS += languageCSS[lang]
-			}
-		}
-	}
-	prismJS += rwt.prismTemplate[1]
-	w.Header().Set("Cache-Control", "public, max-age=7776000")
-	w.Header().Set("Content-Encoding", "gzip")
-	w.Header().Set("Content-Type", "text/javascript")
-	gz := gzip.NewWriter(w)
-	defer gz.Close()
-	_, err = gz.Write([]byte(prismJS))
 	return
 }
 

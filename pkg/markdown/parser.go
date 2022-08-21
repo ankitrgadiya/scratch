@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"html/template"
 
+	chromahtml "github.com/alecthomas/chroma/formatters/html"
 	"github.com/yuin/goldmark"
-	emoji "github.com/yuin/goldmark-emoji"
+	"github.com/yuin/goldmark-emoji"
+	"github.com/yuin/goldmark-highlighting"
 	"github.com/yuin/goldmark/extension"
 	"github.com/yuin/goldmark/parser"
 	"github.com/yuin/goldmark/renderer/html"
@@ -18,6 +20,10 @@ func NewParser() *Parser {
 				extension.GFM,
 				extension.Footnote,
 				emoji.Emoji,
+				highlighting.NewHighlighting(
+					highlighting.WithStyle("friendly"),
+					highlighting.WithFormatOptions(chromahtml.WithLineNumbers(true)),
+				),
 				WikiLinkExtension(),
 			),
 			goldmark.WithParserOptions(parser.WithAutoHeadingID()),

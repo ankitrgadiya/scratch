@@ -14,7 +14,6 @@ bundle:
 	cp templates/list.html assets/list.html
 	cp templates/header.html assets/header.html
 	cp templates/viewedit.html assets/viewedit.html
-	cp templates/prism.js assets/prism.js
 
 exec: prereq bundle
 	go-bindata -pkg rwtxt -nocompress assets assets/img assets/js assets/css assets/img/favicon
